@@ -61,7 +61,13 @@ Environment Variables:
 
 __version__ = "1.0.0"
 
+# Main client classes
 from .client import AsyncDrip, Drip
+
+# StreamMeter
+from .stream import StreamMeter, StreamMeterFlushResult, StreamMeterOptions
+
+# Error types
 from .errors import (
     DripAPIError,
     DripAuthenticationError,
@@ -73,34 +79,45 @@ from .errors import (
     DripRateLimitError,
     DripValidationError,
 )
+
+# Models
 from .models import (
+    # Customer
     BalanceResult,
+    # Charges
     Charge,
     ChargeInfo,
     ChargeParams,
     ChargeResult,
+    # Enums
     ChargeStatus,
     ChargeStatusResult,
+    # Checkout
     CheckoutParams,
     CheckoutResult,
     CreateCustomerParams,
+    # Webhooks
     CreateWebhookParams,
     CreateWebhookResponse,
+    # Workflows & Runs
     CreateWorkflowParams,
     Customer,
     CustomerStatus,
     DeleteWebhookResponse,
+    # Configuration
     DripConfig,
     EmitEventParams,
     EmitEventsBatchResult,
     EndRunParams,
     EndRunResult,
     EventResult,
+    # Utilities
     IdempotencyKeyParams,
     ListChargesOptions,
     ListChargesResponse,
     ListCustomersOptions,
     ListCustomersResponse,
+    # Meters
     ListMetersResponse,
     ListWebhooksResponse,
     ListWorkflowsResponse,
@@ -120,10 +137,12 @@ from .models import (
     WebhookEventType,
     WebhookStats,
     Workflow,
+    # x402
     X402PaymentProof,
     X402PaymentRequest,
 )
-from .stream import StreamMeter, StreamMeterFlushResult, StreamMeterOptions
+
+# Utility functions
 from .utils import (
     current_timestamp,
     current_timestamp_ms,
