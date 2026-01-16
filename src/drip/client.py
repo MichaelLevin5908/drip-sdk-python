@@ -41,6 +41,7 @@ from .models import (
     RunResult,
     RunTimeline,
     TestWebhookResponse,
+    TrackUsageResult,
     Webhook,
     Workflow,
 )
@@ -144,6 +145,54 @@ class Drip:
             base_url=self._base_url,
             timeout=self._timeout,
         )
+
+    # =========================================================================
+    # Health Check
+    # =========================================================================
+
+    def ping(self) -> dict[str, Any]:
+        """
+        Ping the Drip API to check connectivity and measure latency.
+
+        Returns:
+            Dict with ok (bool), status (str), latency_ms (int), and timestamp.
+
+        Example:
+            >>> health = client.ping()
+            >>> if health["ok"]:
+            ...     print(f"API healthy, latency: {health['latency_ms']}ms")
+        """
+        import time
+
+        # Construct health endpoint URL (without /v1)
+        health_url = self._base_url
+        if health_url.endswith("/v1"):
+            health_url = health_url[:-3]
+        elif health_url.endswith("/v1/"):
+            health_url = health_url[:-4]
+        health_url = health_url.rstrip("/") + "/health"
+
+        start = time.time()
+        try:
+            response = self._client.get(health_url)
+            latency_ms = int((time.time() - start) * 1000)
+
+            try:
+                data = response.json()
+                status = data.get("status", "unknown")
+                timestamp = data.get("timestamp", int(time.time()))
+            except Exception:
+                status = "healthy" if response.is_success else f"error:{response.status_code}"
+                timestamp = int(time.time())
+
+            return {
+                "ok": response.is_success and status == "healthy",
+                "status": status,
+                "latency_ms": latency_ms,
+                "timestamp": timestamp,
+            }
+        except httpx.RequestError as e:
+            raise DripNetworkError(f"Ping failed: {e}") from e
 
     # =========================================================================
     # HTTP Request Helpers
@@ -403,6 +452,61 @@ class Drip:
         """
         response = self._get(f"/charges/{charge_id}/status")
         return ChargeStatusResult.model_validate(response)
+
+    def track_usage(
+        self,
+        customer_id: str,
+        meter: str,
+        quantity: float,
+        idempotency_key: str | None = None,
+        units: str | None = None,
+        description: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> TrackUsageResult:
+        """
+        Record usage for internal visibility WITHOUT billing.
+
+        Use this for:
+        - Tracking internal team usage without charging
+        - Pilot programs where you want visibility before billing
+        - Pre-billing tracking before customer wallet setup
+
+        This does NOT:
+        - Create a Charge record
+        - Require customer balance
+        - Require blockchain/wallet setup
+
+        For billing, use `charge()` instead.
+
+        Args:
+            customer_id: The customer ID.
+            meter: Usage meter type (e.g., "api_calls", "tokens").
+            quantity: Amount to record.
+            idempotency_key: Optional key to prevent duplicate records.
+            units: Optional unit label (e.g., "tokens", "requests").
+            description: Optional description.
+            metadata: Optional metadata.
+
+        Returns:
+            TrackUsageResult with event ID and confirmation.
+        """
+        body: dict[str, Any] = {
+            "customerId": customer_id,
+            "usageType": meter,
+            "quantity": quantity,
+        }
+
+        if idempotency_key:
+            body["idempotencyKey"] = idempotency_key
+        if units:
+            body["units"] = units
+        if description:
+            body["description"] = description
+        if metadata:
+            body["metadata"] = metadata
+
+        response = self._post("/usage/internal", json=body)
+        return TrackUsageResult.model_validate(response)
 
     # =========================================================================
     # Checkout (Fiat On-Ramp)
@@ -751,7 +855,7 @@ class Drip:
         Returns:
             Batch result with created count and duplicates.
         """
-        response = self._post("/events/batch", json={"events": events})
+        response = self._post("/run-events/batch", json={"events": events})
         return EmitEventsBatchResult.model_validate(response)
 
     def get_run_timeline(self, run_id: str) -> RunTimeline:
@@ -1021,6 +1125,54 @@ class AsyncDrip:
         )
 
     # =========================================================================
+    # Health Check
+    # =========================================================================
+
+    async def ping(self) -> dict[str, Any]:
+        """
+        Ping the Drip API to check connectivity and measure latency.
+
+        Returns:
+            Dict with ok (bool), status (str), latency_ms (int), and timestamp.
+
+        Example:
+            >>> health = await client.ping()
+            >>> if health["ok"]:
+            ...     print(f"API healthy, latency: {health['latency_ms']}ms")
+        """
+        import time
+
+        # Construct health endpoint URL (without /v1)
+        health_url = self._base_url
+        if health_url.endswith("/v1"):
+            health_url = health_url[:-3]
+        elif health_url.endswith("/v1/"):
+            health_url = health_url[:-4]
+        health_url = health_url.rstrip("/") + "/health"
+
+        start = time.time()
+        try:
+            response = await self._client.get(health_url)
+            latency_ms = int((time.time() - start) * 1000)
+
+            try:
+                data = response.json()
+                status = data.get("status", "unknown")
+                timestamp = data.get("timestamp", int(time.time()))
+            except Exception:
+                status = "healthy" if response.is_success else f"error:{response.status_code}"
+                timestamp = int(time.time())
+
+            return {
+                "ok": response.is_success and status == "healthy",
+                "status": status,
+                "latency_ms": latency_ms,
+                "timestamp": timestamp,
+            }
+        except httpx.RequestError as e:
+            raise DripNetworkError(f"Ping failed: {e}") from e
+
+    # =========================================================================
     # HTTP Request Helpers
     # =========================================================================
 
@@ -1185,6 +1337,44 @@ class AsyncDrip:
         """Quick status check for a charge."""
         response = await self._get(f"/charges/{charge_id}/status")
         return ChargeStatusResult.model_validate(response)
+
+    async def track_usage(
+        self,
+        customer_id: str,
+        meter: str,
+        quantity: float,
+        idempotency_key: str | None = None,
+        units: str | None = None,
+        description: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> TrackUsageResult:
+        """
+        Record usage for internal visibility WITHOUT billing.
+
+        Use this for:
+        - Tracking internal team usage without charging
+        - Pilot programs where you want visibility before billing
+        - Pre-billing tracking before customer wallet setup
+
+        For billing, use `charge()` instead.
+        """
+        body: dict[str, Any] = {
+            "customerId": customer_id,
+            "usageType": meter,
+            "quantity": quantity,
+        }
+
+        if idempotency_key:
+            body["idempotencyKey"] = idempotency_key
+        if units:
+            body["units"] = units
+        if description:
+            body["description"] = description
+        if metadata:
+            body["metadata"] = metadata
+
+        response = await self._post("/usage/internal", json=body)
+        return TrackUsageResult.model_validate(response)
 
     # =========================================================================
     # Checkout
@@ -1401,7 +1591,7 @@ class AsyncDrip:
         events: list[dict[str, Any]],
     ) -> EmitEventsBatchResult:
         """Emit multiple events in one request."""
-        response = await self._post("/events/batch", json={"events": events})
+        response = await self._post("/run-events/batch", json={"events": events})
         return EmitEventsBatchResult.model_validate(response)
 
     async def get_run_timeline(self, run_id: str) -> RunTimeline:

@@ -144,9 +144,11 @@ class BalanceResult(BaseModel):
     """Balance information for a customer."""
 
     customer_id: str = Field(alias="customerId")
-    balance_usdc: str = Field(alias="balanceUSDC", description="Balance in USDC (6 decimals)")
-    balance_token: str = Field(alias="balanceToken")
-    last_updated: str = Field(alias="lastUpdated")
+    onchain_address: str = Field(alias="onchainAddress")
+    balance_usdc: str = Field(alias="balanceUsdc", description="Balance in USDC (6 decimals)")
+    pending_charges_usdc: str = Field(alias="pendingChargesUsdc")
+    available_usdc: str = Field(alias="availableUsdc")
+    last_synced_at: str | None = Field(alias="lastSyncedAt")
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -187,6 +189,20 @@ class ChargeResult(BaseModel):
     usage_event_id: str = Field(alias="usageEventId")
     is_replay: bool = Field(alias="isReplay", description="True if idempotent replay")
     charge: ChargeInfo
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class TrackUsageResult(BaseModel):
+    """Result of tracking usage without billing."""
+
+    success: bool
+    usage_event_id: str = Field(alias="usageEventId")
+    customer_id: str = Field(alias="customerId")
+    usage_type: str = Field(alias="usageType")
+    quantity: float
+    is_internal: bool = Field(alias="isInternal")
+    message: str
 
     model_config = ConfigDict(populate_by_name=True)
 
